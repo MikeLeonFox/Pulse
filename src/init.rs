@@ -240,6 +240,50 @@ pub fn run() -> Result<(), PulseError> {
     Ok(())
 }
 
+pub fn uninstall() -> Result<(), PulseError> {
+    println!("── Uninstalling pulse ─────────────────────────");
+
+    // Stop and remove LaunchAgent
+    let plist = plist_path();
+    if plist.exists() {
+        let _ = std::process::Command::new("launchctl")
+            .args(["unload", &plist.to_string_lossy()])
+            .output();
+        std::fs::remove_file(&plist)?;
+        println!("✓ Removed LaunchAgent");
+    } else {
+        println!("  LaunchAgent not installed — skipping");
+    }
+
+    // Config
+    let cfg_path = config::config_path();
+    if cfg_path.exists() {
+        let answer = ask(&format!("Remove config at {}? [y/N]: ", cfg_path.display()));
+        if answer.eq_ignore_ascii_case("y") {
+            std::fs::remove_file(&cfg_path)?;
+            println!("✓ Removed config");
+        }
+    }
+
+    // State
+    let state_path = crate::state::state_path();
+    if state_path.exists() {
+        let answer = ask(&format!(
+            "Remove state at {}? [y/N]: ",
+            state_path.display()
+        ));
+        if answer.eq_ignore_ascii_case("y") {
+            std::fs::remove_file(&state_path)?;
+            println!("✓ Removed state");
+        }
+    }
+
+    println!();
+    println!("Done. Remove the binary with: cargo uninstall pulse");
+
+    Ok(())
+}
+
 pub fn stop() -> Result<(), PulseError> {
     let path = plist_path();
     if !path.exists() {

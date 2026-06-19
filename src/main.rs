@@ -53,13 +53,12 @@ enum Commands {
     /// Run the native macOS menubar widget
     #[cfg(target_os = "macos")]
     Menubar,
-    /// Install (or uninstall) the menubar LaunchAgent
+    /// Install menubar LaunchAgent and walk through config
     #[cfg(target_os = "macos")]
-    Setup {
-        /// Remove the LaunchAgent instead of installing
-        #[arg(long)]
-        uninstall: bool,
-    },
+    Setup,
+    /// Remove pulse: LaunchAgent, config, and state
+    #[cfg(target_os = "macos")]
+    Uninstall,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -101,13 +100,9 @@ async fn main() {
         #[cfg(target_os = "macos")]
         Commands::Menubar => menubar::run(),
         #[cfg(target_os = "macos")]
-        Commands::Setup { uninstall } => {
-            if uninstall {
-                init::stop()
-            } else {
-                init::run()
-            }
-        }
+        Commands::Setup => init::run(),
+        #[cfg(target_os = "macos")]
+        Commands::Uninstall => init::uninstall(),
     };
 
     if let Err(e) = result {
