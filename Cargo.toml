@@ -23,6 +23,9 @@ dirs = "5"
 thiserror = "1"
 chrono = { version = "0.4", features = ["serde"] }
 
+[lints.rust]
+unexpected_cfgs = "allow"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.26"
 objc = "0.2"

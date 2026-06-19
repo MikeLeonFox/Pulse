@@ -10,12 +10,10 @@ use cocoa::foundation::{NSAutoreleasePool, NSString};
 use objc::declare::ClassDecl;
 use objc::runtime::{Object, Sel};
 use objc::{class, msg_send, sel, sel_impl};
-use std::path::PathBuf;
 
 const POLL_SECS: f64 = 30.0;
 
 struct MenubarInner {
-    state_path: PathBuf,
     button: id,
     menu: id,
 }
@@ -59,7 +57,7 @@ extern "C" fn tick(this: &Object, _: Sel, _: id) {
 
             for (name, src) in sources {
                 // Source header
-                let header_title = if let Some(ref err) = src.error {
+                let header_title = if src.error.is_some() {
                     format!("{name}: ⚠ error")
                 } else {
                     format!("{name}: {} firing", src.firing)
@@ -154,11 +152,7 @@ pub fn run() -> Result<(), PulseError> {
         decl.add_method(sel!(tick:), tick as extern "C" fn(&Object, Sel, id));
         let cls = decl.register();
 
-        let inner_ptr = Box::into_raw(Box::new(MenubarInner {
-            state_path: state::state_path(),
-            button,
-            menu,
-        }));
+        let inner_ptr = Box::into_raw(Box::new(MenubarInner { button, menu }));
 
         let delegate: id = msg_send![cls, new];
         (*delegate).set_ivar("_inner", inner_ptr as usize);
