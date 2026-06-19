@@ -29,6 +29,9 @@ pub struct Source {
     pub bearer_token: Option<String>,
     #[serde(default)]
     pub bearer_token_env: Option<String>,
+    /// Shell command whose stdout is used as the bearer token (e.g. `az account get-access-token ...`)
+    #[serde(default)]
+    pub token_command: Option<String>,
     #[serde(default)]
     pub insecure_skip_tls_verify: bool,
 }
@@ -40,6 +43,15 @@ impl Source {
         }
         if let Some(ref env_var) = self.bearer_token_env {
             return std::env::var(env_var).ok();
+        }
+        if let Some(ref cmd) = self.token_command {
+            let out = std::process::Command::new("sh")
+                .args(["-c", cmd])
+                .output()
+                .ok()?;
+            if out.status.success() {
+                return Some(String::from_utf8_lossy(&out.stdout).trim().to_string());
+            }
         }
         None
     }

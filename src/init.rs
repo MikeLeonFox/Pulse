@@ -90,7 +90,14 @@ fn build_config() -> Config {
             SourceKind::Prometheus => None,
         };
 
-        let bearer_token_env = ask_optional("  Bearer token env var (e.g. PULSE_TOKEN)");
+        println!("  Auth — pick one (leave all blank for no auth):");
+        let bearer_token_env =
+            ask_optional("    Env var holding a static token (e.g. PULSE_TOKEN)");
+        let token_command = if bearer_token_env.is_none() {
+            ask_optional("    Command to fetch token (e.g. az account get-access-token --query accessToken -o tsv)")
+        } else {
+            None
+        };
 
         let insecure_str = ask_default("  Skip TLS verify (for self-signed certs)?", "n");
         let insecure_skip_tls_verify = insecure_str.eq_ignore_ascii_case("y");
@@ -102,6 +109,7 @@ fn build_config() -> Config {
             org_id,
             bearer_token: None,
             bearer_token_env,
+            token_command,
             insecure_skip_tls_verify,
         });
     }
@@ -130,6 +138,9 @@ fn write_config(cfg: &Config) -> Result<(), PulseError> {
         }
         if let Some(ref env) = src.bearer_token_env {
             out.push_str(&format!("bearer_token_env = \"{env}\"\n"));
+        }
+        if let Some(ref cmd) = src.token_command {
+            out.push_str(&format!("token_command = \"{cmd}\"\n"));
         }
         if src.insecure_skip_tls_verify {
             out.push_str("insecure_skip_tls_verify = true\n");
