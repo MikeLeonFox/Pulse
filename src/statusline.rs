@@ -19,9 +19,9 @@ pub fn run(format: Format) {
         ),
         Format::Default => {
             if total == 0 {
-                println!("✅ 0");
+                println!("0 firing");
             } else {
-                println!("🔥 {total}");
+                println!("{total} firing");
             }
         }
         Format::Xbar => print_xbar(&state, total),
@@ -30,9 +30,9 @@ pub fn run(format: Format) {
 
 fn print_xbar(state: &State, total: usize) {
     if total == 0 {
-        println!("✅ 0 | color=green");
+        println!("0 | color=green");
     } else {
-        println!("🔥 {total} | color=red");
+        println!("{total} | color=red");
     }
     println!("---");
 

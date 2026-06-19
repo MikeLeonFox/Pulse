@@ -22,6 +22,26 @@ unsafe fn ns_string(s: &str) -> id {
     NSString::alloc(nil).init_str(s)
 }
 
+unsafe fn set_sf_symbol(button: id, name: &str) {
+    let has_sf: cocoa::base::BOOL = msg_send![
+        class!(NSImage),
+        respondsToSelector: sel!(imageWithSystemSymbolName:accessibilityDescription:)
+    ];
+    if has_sf != YES {
+        return;
+    }
+    let sym_ns = ns_string(name);
+    let image: id = msg_send![
+        class!(NSImage),
+        imageWithSystemSymbolName: sym_ns
+        accessibilityDescription: nil
+    ];
+    if image != nil {
+        let () = msg_send![image, setTemplate: YES];
+        let () = msg_send![button, setImage: image];
+    }
+}
+
 extern "C" fn tick(this: &Object, _: Sel, _: id) {
     unsafe {
         let inner_ptr = *this.get_ivar::<usize>("_inner") as *mut MenubarInner;
@@ -30,14 +50,21 @@ extern "C" fn tick(this: &Object, _: Sel, _: id) {
         let state = state::load();
         let total: usize = state.sources.values().map(|s| s.firing).sum();
 
-        // Update button title
-        let title = if total == 0 {
-            "✅ 0".to_string()
+        // Icon: bell when clear, bell.badge.fill when firing
+        let sym = if total == 0 {
+            "bell"
         } else {
-            format!("🔥 {total}")
+            "bell.badge.fill"
         };
-        let title_ns = ns_string(&title);
-        let () = msg_send![inner.button, setTitle: title_ns];
+        set_sf_symbol(inner.button, sym);
+
+        // Title: empty when clear, count when firing
+        let title = if total == 0 {
+            String::new()
+        } else {
+            format!(" {total}")
+        };
+        let () = msg_send![inner.button, setTitle: ns_string(&title)];
 
         // Rebuild dropdown menu
         let item_count: usize = msg_send![inner.menu, numberOfItems];
@@ -56,9 +83,8 @@ extern "C" fn tick(this: &Object, _: Sel, _: id) {
             sources.sort_by_key(|(name, _)| name.as_str());
 
             for (name, src) in sources {
-                // Source header
                 let header_title = if src.error.is_some() {
-                    format!("{name}: ⚠ error")
+                    format!("{name}: error")
                 } else {
                     format!("{name}: {} firing", src.firing)
                 };
@@ -68,12 +94,12 @@ extern "C" fn tick(this: &Object, _: Sel, _: id) {
                 let () = msg_send![inner.menu, addItem: header];
 
                 if let Some(ref err) = src.error {
-                    let err_item: id = msg_send![class!(NSMenuItem), new];
                     let short = if err.len() > 60 {
                         &err[..60]
                     } else {
                         err.as_str()
                     };
+                    let err_item: id = msg_send![class!(NSMenuItem), new];
                     let () = msg_send![err_item, setTitle: ns_string(&format!("  {short}"))];
                     let () = msg_send![err_item, setEnabled: NO];
                     let () = msg_send![inner.menu, addItem: err_item];
@@ -89,12 +115,8 @@ extern "C" fn tick(this: &Object, _: Sel, _: id) {
                     });
 
                     for alert in &alerts {
-                        let icon = match alert.severity.as_deref() {
-                            Some("critical") => "🔴",
-                            Some("warning") => "🟠",
-                            _ => "🟡",
-                        };
-                        let label = format!("  {icon} {}", alert.name);
+                        let sev = alert.severity.as_deref().unwrap_or("unknown");
+                        let label = format!("  {} [{}]", alert.name, sev);
                         let item: id = msg_send![class!(NSMenuItem), new];
                         let () = msg_send![item, setTitle: ns_string(&label)];
                         let () = msg_send![item, setEnabled: NO];
@@ -107,7 +129,6 @@ extern "C" fn tick(this: &Object, _: Sel, _: id) {
             }
         }
 
-        // Last updated
         if let Some(ref ts) = state.fetched_at {
             let ts_item: id = msg_send![class!(NSMenuItem), new];
             let () = msg_send![
@@ -121,7 +142,6 @@ extern "C" fn tick(this: &Object, _: Sel, _: id) {
             let () = msg_send![inner.menu, addItem: sep];
         }
 
-        // Quit
         let quit: id = msg_send![class!(NSMenuItem), new];
         let () = msg_send![quit, setTitle: ns_string("Quit pulse")];
         let () = msg_send![quit, setAction: sel!(terminate:)];
@@ -157,7 +177,6 @@ pub fn run() -> Result<(), PulseError> {
         let delegate: id = msg_send![cls, new];
         (*delegate).set_ivar("_inner", inner_ptr as usize);
 
-        // Fire immediately, then every POLL_SECS
         let _timer: id = msg_send![
             class!(NSTimer),
             scheduledTimerWithTimeInterval: POLL_SECS
