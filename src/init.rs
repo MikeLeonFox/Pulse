@@ -129,7 +129,7 @@ fn write_config(cfg: &Config) -> Result<(), PulseError> {
     let mut out = format!("interval_secs = {}\n", cfg.interval_secs);
 
     for src in &cfg.sources {
-        out.push_str("\n[[source]]\n");
+        out.push_str("\n[[sources]]\n");
         out.push_str(&format!("name = \"{}\"\n", src.name));
         out.push_str(&format!("kind = \"{}\"\n", src.kind));
         out.push_str(&format!("url  = \"{}\"\n", src.url));
@@ -228,12 +228,22 @@ pub fn run() -> Result<(), PulseError> {
 
         println!();
         println!("── Testing connection ─────────────────────────");
-        let status = std::process::Command::new(pulse_bin())
+        let out = std::process::Command::new(pulse_bin())
             .args(["poll", "--once"])
-            .status();
-        match status {
-            Ok(s) if s.success() => println!("✓ Fetched successfully"),
-            _ => eprintln!("⚠ poll --once failed — check your URLs and tokens"),
+            .output();
+        match out {
+            Ok(o)
+                if o.status.success()
+                    && !String::from_utf8_lossy(&o.stderr).contains("no sources") =>
+            {
+                println!("✓ Fetched successfully");
+            }
+            Ok(o) => {
+                let err = String::from_utf8_lossy(&o.stderr);
+                eprintln!("⚠ {}", err.trim());
+                eprintln!("  Check your URL and token, then run: pulse poll --once");
+            }
+            Err(e) => eprintln!("⚠ Could not run poll: {e}"),
         }
     } else {
         println!("✓ Config already exists at {}", cfg_path.display());
