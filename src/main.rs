@@ -5,6 +5,9 @@ mod alerts;
 mod client;
 mod config;
 mod error;
+mod init;
+#[cfg(target_os = "macos")]
+mod menubar;
 mod poller;
 mod state;
 mod statusline;
@@ -47,6 +50,16 @@ enum Commands {
     },
     /// Show resolved config and state summary
     Info,
+    /// Run the native macOS menubar widget
+    #[cfg(target_os = "macos")]
+    Menubar,
+    /// Install (or uninstall) the menubar LaunchAgent
+    #[cfg(target_os = "macos")]
+    Setup {
+        /// Remove the LaunchAgent instead of installing
+        #[arg(long)]
+        uninstall: bool,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -84,6 +97,16 @@ async fn main() {
         Commands::Info => {
             show_info();
             return;
+        }
+        #[cfg(target_os = "macos")]
+        Commands::Menubar => menubar::run(),
+        #[cfg(target_os = "macos")]
+        Commands::Setup { uninstall } => {
+            if uninstall {
+                init::stop()
+            } else {
+                init::run()
+            }
         }
     };
 
