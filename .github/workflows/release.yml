@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-14
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cross-linker (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Configure cross-linker (Linux aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          mkdir -p .cargo
+          echo '[target.aarch64-unknown-linux-gnu]' >> .cargo/config.toml
+          echo 'linker = "aarch64-linux-gnu-gcc"' >> .cargo/config.toml
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          BINARY=target/${{ matrix.target }}/release/pulse
+          ARCHIVE=pulse-${{ matrix.target }}.tar.gz
+          tar -czf "$ARCHIVE" -C "$(dirname $BINARY)" "$(basename $BINARY)"
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          if command -v shasum &>/dev/null; then
+            echo "SHA256=$(shasum -a 256 $ARCHIVE | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          else
+            echo "SHA256=$(sha256sum $ARCHIVE | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.ARCHIVE }}
+
+  release:
+    name: Create release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Compute checksums
+        id: sums
+        run: |
+          for f in artifacts/*.tar.gz; do
+            NAME=$(basename "$f" .tar.gz | sed 's/pulse-//')
+            SHA=$(sha256sum "$f" | cut -d' ' -f1)
+            echo "${NAME}=${SHA}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          gh release create "$GITHUB_REF_NAME" \
+            --title "v${VERSION}" \
+            --generate-notes \
+            artifacts/*.tar.gz
+
+      - name: Update Homebrew tap
+        if: ${{ secrets.TAP_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.TAP_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          BASE="https://github.com/MikeLeonFox/Pulse/releases/download/${GITHUB_REF_NAME}"
+
+          SHA_ARM=$(sha256sum artifacts/pulse-aarch64-apple-darwin.tar.gz | cut -d' ' -f1)
+          SHA_X86=$(sha256sum artifacts/pulse-x86_64-apple-darwin.tar.gz | cut -d' ' -f1)
+          SHA_LNX=$(sha256sum artifacts/pulse-x86_64-unknown-linux-gnu.tar.gz | cut -d' ' -f1)
+          SHA_LNX_ARM=$(sha256sum artifacts/pulse-aarch64-unknown-linux-gnu.tar.gz | cut -d' ' -f1)
+
+          git clone https://x-access-token:${GH_TOKEN}@github.com/MikeLeonFox/homebrew-tap.git tap
+          cd tap
+
+          cat > Formula/pulse.rb << FORMULA
+          class Pulse < Formula
+            desc "Statusbar alert count from Prometheus / Mimir"
+            homepage "https://github.com/MikeLeonFox/Pulse"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "${BASE}/pulse-aarch64-apple-darwin.tar.gz"
+                sha256 "${SHA_ARM}"
+              end
+              on_intel do
+                url "${BASE}/pulse-x86_64-apple-darwin.tar.gz"
+                sha256 "${SHA_X86}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "${BASE}/pulse-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LNX_ARM}"
+              end
+              on_intel do
+                url "${BASE}/pulse-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LNX}"
+              end
+            end
+
+            def install
+              bin.install "pulse"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/pulse --version")
+            end
+          end
+          FORMULA
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/pulse.rb
+          git commit -m "pulse ${GITHUB_REF_NAME}"
+          git push
