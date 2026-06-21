@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 const LABEL: &str = "sh.pulse.menubar";
 
-fn plist_path() -> PathBuf {
+pub fn plist_path() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("~"))
         .join("Library")
@@ -117,6 +117,7 @@ fn build_config() -> Config {
     Config {
         interval_secs,
         sources,
+        statusbar_mode: config::StatusbarMode::Simple,
     }
 }
 

@@ -24,7 +24,7 @@ pub fn run(source_filter: Option<String>, json: bool) {
         .sum();
 
     if total == 0 {
-        println!("✅ No alerts firing");
+        println!("🔔 No alerts firing");
         return;
     }
 
@@ -41,7 +41,7 @@ pub fn run(source_filter: Option<String>, json: bool) {
             continue;
         }
 
-        println!("\n📡  {} — {} firing", name, src.firing);
+        println!("\n🔔  {} — {} firing", name, src.firing);
         println!("{}", "─".repeat(48));
 
         let mut alerts = src.alerts.clone();
@@ -59,7 +59,7 @@ pub fn run(source_filter: Option<String>, json: bool) {
             let icon = match sev {
                 "critical" => "🔴",
                 "warning" => "🟠",
-                _ => "🟡",
+                _ => "🟢",
             };
             println!("{icon}  {} [{}]", alert.name, sev);
 

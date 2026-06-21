@@ -19,9 +19,9 @@ pub fn run(format: Format) {
         ),
         Format::Default => {
             if total == 0 {
-                println!("0 firing");
+                println!("🔔 0");
             } else {
-                println!("{total} firing");
+                println!("🔔 {total}");
             }
         }
         Format::Xbar => print_xbar(&state, total),
@@ -30,9 +30,9 @@ pub fn run(format: Format) {
 
 fn print_xbar(state: &State, total: usize) {
     if total == 0 {
-        println!("0 | color=green");
+        println!("🔔 0 | color=green");
     } else {
-        println!("{total} | color=red");
+        println!("🔔 {total} | color=red");
     }
     println!("---");
 
@@ -44,18 +44,18 @@ fn print_xbar(state: &State, total: usize) {
 
     for (name, src) in &state.sources {
         if let Some(ref err) = src.error {
-            println!("{name}: ⚠ error | color=orange");
+            println!("{name}: 🔴 error | color=orange");
             println!("--{err} | color=gray");
         } else {
             let color = if src.firing > 0 { "red" } else { "green" };
             println!("{name}: {} firing | color={color}", src.firing);
             for alert in &src.alerts {
-                let sev_color = match alert.severity.as_deref() {
-                    Some("critical") => "red",
-                    Some("warning") => "orange",
-                    _ => "black",
+                let sev_icon = match alert.severity.as_deref() {
+                    Some("critical") => "🔴",
+                    Some("warning") => "🟠",
+                    _ => "🟢",
                 };
-                println!("--{} | color={sev_color}", alert.name);
+                println!("--{} {} | trim=false", sev_icon, alert.name);
             }
         }
     }

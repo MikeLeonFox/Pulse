@@ -59,6 +59,9 @@ enum Commands {
     /// Remove pulse: LaunchAgent, config, and state
     #[cfg(target_os = "macos")]
     Uninstall,
+    /// Restart the menubar process (unload + load LaunchAgent)
+    #[cfg(target_os = "macos")]
+    Reload,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -103,6 +106,28 @@ async fn main() {
         Commands::Setup => init::run(),
         #[cfg(target_os = "macos")]
         Commands::Uninstall => init::uninstall(),
+        #[cfg(target_os = "macos")]
+        Commands::Reload => {
+            let plist = init::plist_path();
+            if !plist.exists() {
+                eprintln!("pulse: not installed (run: pulse setup)");
+                process::exit(1);
+            }
+            let _ = std::process::Command::new("launchctl")
+                .args(["unload", &plist.to_string_lossy()])
+                .output();
+            let out = std::process::Command::new("launchctl")
+                .args(["load", "-w", &plist.to_string_lossy()])
+                .output()
+                .expect("launchctl failed");
+            if out.status.success() {
+                println!("✓ pulse reloaded");
+            } else {
+                eprintln!("pulse: {}", String::from_utf8_lossy(&out.stderr));
+                process::exit(1);
+            }
+            return;
+        }
     };
 
     if let Err(e) = result {
@@ -116,9 +141,9 @@ fn show_info() {
     println!("Config:  {}", cfg_path.display());
 
     match config::load() {
-        Err(e) => println!("  ⚠ {e}"),
+        Err(e) => println!("  🔴 {e}"),
         Ok(cfg) if cfg.sources.is_empty() => {
-            println!("  ⚠ no sources configured");
+            println!("  🔔 no sources configured");
             println!();
             println!("Create {} with:", cfg_path.display());
             println!();
@@ -165,7 +190,7 @@ fn show_info() {
             println!("  firing: {total}");
             for (name, src) in &state.sources {
                 if let Some(ref err) = src.error {
-                    println!("  [{name}] ⚠ {err}");
+                    println!("  [{name}] 🔴 {err}");
                 } else {
                     println!("  [{name}] {} firing", src.firing);
                 }

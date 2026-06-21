@@ -2,11 +2,20 @@ use crate::error::PulseError;
 use serde::Deserialize;
 use std::path::PathBuf;
 
+#[derive(Debug, Deserialize, Clone, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum StatusbarMode {
+    #[default]
+    Simple,
+    Detailed,
+}
+
 #[derive(Debug, Deserialize, Clone)]
 #[serde(default)]
 pub struct Config {
     pub interval_secs: u64,
     pub sources: Vec<Source>,
+    pub statusbar_mode: StatusbarMode,
 }
 
 impl Default for Config {
@@ -14,6 +23,7 @@ impl Default for Config {
         Self {
             interval_secs: 30,
             sources: Vec::new(),
+            statusbar_mode: StatusbarMode::Simple,
         }
     }
 }
@@ -74,8 +84,9 @@ impl std::fmt::Display for SourceKind {
 }
 
 pub fn config_path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("~"))
+        .join(".config")
         .join("pulse")
         .join("config.toml")
 }
